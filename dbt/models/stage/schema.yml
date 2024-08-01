@@ -7,3 +7,10 @@ models:
     columns:
       - name: batch_id
         description: "batch where source data was loaded"
+  - name: stg_places
+    description: "Staging table for places"
+  - name: places
+    description: "Normalized deduped places source"
+  - name: events
+    description: "Normalized deduped events source"
+  
