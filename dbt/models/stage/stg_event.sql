@@ -1,15 +1,15 @@
 with tm_source as (
 select distinct 
-	event.name as event_name,
+	event.name as name,
     'ticketmaster' as source,
-    md5(concat(event.name, '|' ,dates__start__local_date)) as source_key,
+    md5(concat(event.name, '|' ,dates__start__local_date)) as key,
     dates__start__date_time as start_datetime,
     event.id as external_id,
     event.url as ticket_url,
     dates__status__code as ticket_status,
-    venue.name as venue_name,
-    venue.id as source_venue_id,
-    md5(concat(venue.name, '|' ,venue.city__name, venue.state__state_code)) as venue_source_key,
+    --venue.name as place_name,
+    venue.id as source_place_id,
+    md5(concat(venue.name, '|' ,venue.city__name, venue.state__state_code)) as place_key,
     classification.segment__name as segment_name,
     classification.genre__name as genre_name,
     classification.sub_genre__name as sub_genre_name

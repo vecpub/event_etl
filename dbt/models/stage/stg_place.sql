@@ -3,7 +3,7 @@
 with tm_source as (
 select distinct name, 
     'ticketmaster' as source,
-    md5(concat(name, '|' ,city__name, state__state_code)) as source_key,
+    md5(concat(name, '|' ,city__name, state__state_code)) as key,
     id as external_id,
     location__latitude as latitude,
     location__longitude as longitude,
