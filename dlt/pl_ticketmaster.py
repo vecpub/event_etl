@@ -1,5 +1,6 @@
 import dlt
 import time
+import datetime
 from datetime import date
 from dlt.sources.helpers import requests
 from dlt.sources.helpers.rest_client import paginate
@@ -24,8 +25,14 @@ def build_periods():
     current_period = f'*,{next_month_start.strftime("%Y-%m-%dT00:00:00")}'
     following_period = f'{next_month_start.strftime("%Y-%m-%dT00:00:00")},{following_month_start.strftime("%Y-%m-%dT00:00:00")}'
     return [current_period, following_period]
+    #return [current_period] #TESTING REMOVE
 
-@dlt.resource(table_name='stg_ticketmaster', write_disposition='merge', primary_key='id')
+@dlt.resource(
+        table_name='stg_ticketmaster',
+        write_disposition='merge',
+        primary_key='id',
+        max_table_nesting=0,
+)
 def test_events():
     for category in ["music", "comedy", "film"]:
         for period in build_periods():
@@ -40,10 +47,31 @@ def test_events():
                 time.sleep(1)
                 yield page
 
+@dlt.resource(
+        table_name='stg_ticketmaster',
+        write_disposition='merge',
+        primary_key='id',
+        max_table_nesting=0,
+)
+
+def test_events_all():
+    """Alternate that pulls all events regardless of classification"""
+    for page in client.paginate("/events.json",
+        params={
+            "dmaId": 345,
+            "size": 200,
+            #"localStartDateTime": '*,2024-08-21T00:00:00',
+            "localStartDateTime": '2024-08-28T00:00:00,2024-09-05T00:00:00',
+        },
+    ):
+        time.sleep(1)
+        yield page
+
 pipeline = dlt.pipeline(
     pipeline_name='ticketmaster_pipeline',
     destination='postgres',
-    dataset_name='pl_ticketmaster',
+    dataset_name='pipeline_ticketmaster',
+    dev_mode=False,
 )
 
 load_info = pipeline.run(test_events)

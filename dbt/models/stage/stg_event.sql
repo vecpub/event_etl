@@ -2,21 +2,21 @@ with tm_source as (
 select distinct 
 	event.name as name,
     'ticketmaster' as source,
-    md5(concat(event.name, '|' ,dates__start__local_date)) as key,
-    dates__start__date_time as start_datetime,
+    md5(concat(event.name, '|' ,(event.dates->'start'->>'dateTime')::timestamptz )) as key,
+    (event.dates->'start'->>'dateTime')::timestamptz as start_datetime,
     event.id as external_id,
     event.url as ticket_url,
-    dates__status__code as ticket_status,
-    --venue.name as place_name,
-    venue.id as source_place_id,
-    md5(concat(venue.name, '|' ,venue.city__name, venue.state__state_code)) as place_key,
-    classification.segment__name as segment_name,
-    classification.genre__name as genre_name,
-    classification.sub_genre__name as sub_genre_name
-
-from pl_ticketmaster.stg_ticketmaster event
-left join pl_ticketmaster.stg_ticketmaster___embedded__venues venue on event._dlt_id = venue._dlt_parent_id
-left join pl_ticketmaster.stg_ticketmaster__classifications classification on event._dlt_id = classification._dlt_parent_id
+    event.dates->'status'->>'code' as ticket_status,
+    event._embedded->'venues'->0->>'id' as source_place_id,
+    md5(concat(
+    	event._embedded->'venues'->0->>'name', '|' , event._embedded->'venues'->0->'state'->>'stateCode' 
+    )) as place_key,
+	event.classifications->0->'segment'->>'name' as segment,
+	event.classifications->0->'genre'->>'name' as genre,
+	event.classifications->0->'subGenre'->>'name' as sub_genre,
+	event.price_ranges->0->>'min' as price_min,
+	event.price_ranges->0->>'max' as price_max
+from pipeline_ticketmaster.stg_ticketmaster event
 
 --order by 1
 )
