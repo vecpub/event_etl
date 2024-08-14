@@ -3,7 +3,7 @@
 .venv
 .conda
 .tmp
-/event_lib/config.yaml
+*/secrets.yaml
 
 __pycache__/
 *.py[cod]

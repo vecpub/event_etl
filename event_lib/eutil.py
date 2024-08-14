@@ -5,18 +5,15 @@ import psycopg
 import pandas as pd
 from openai import OpenAI
 
-def get_config_path():
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    config_path = os.path.join(script_dir, 'config.yaml')
-    return config_path
 
-def load_config():
-    config_path = get_config_path()
+def load_config(path):
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    config_path = os.path.join(script_dir, path)
     with open(config_path, 'r') as f:
         config = yaml.safe_load(f)
     return config
 
-config = load_config()
+secrets = load_config('secrets.yaml')
 
 def hello():
     print("Hello")
@@ -24,7 +21,7 @@ def hello():
 def execute_query(query, connection_string=None, params=None):
     """Returns a df based on a select query or also inserts/updates/deletes. Supports named parameters"""
     if not connection_string:
-        creds = config['event_db_config']
+        creds = secrets['event_db_creds']
         connection_string = f"dbname={creds['database']} user={creds['user']} password={creds['password']} host={creds['host']}"
     with psycopg.connect(connection_string) as conn:
         with conn.cursor() as cur:
@@ -49,7 +46,7 @@ class ChatModel():
     Functions:
     complete(messages, tools=None, tool_choice=None): Generate response from chat provider
     """
-    def __init__(self, provider, model=None, store_history=True):
+    def __init__(self, provider, model=None, store_history=False):
         self.provider=provider
         self.model=model
         self.store_history=store_history
@@ -72,11 +69,13 @@ class ChatModel():
 
     def complete(self, messages, tools=None, tool_choice=None):
         if isinstance(messages, str):
-            messages = {'role':'user', 'content':messages}
+            messages = [{'role':'user', 'content':messages}]
+
         if self.store_history:
-            self.message_history.append(messages)
+            self.message_history = self.message_history + messages 
         else:
-            self.message_history = [messages]
+            self.message_history = messages
+
         try:
             response = self.client.chat.completions.create(
                 model=self.model,
@@ -90,3 +89,36 @@ class ChatModel():
             print("Unable to generate response")
             print(f'Exception: {e}')
             return e
+
+
+#pytest event_lib/eutil.py -rP -k test_complete_with_string_no_history
+def test_complete_with_string_no_history():
+    cm = ChatModel('openai', store_history=False)
+    print('no message history, string input')
+    print(cm.complete("What is the capital of France?"))
+
+def test_complete_with_string_and_history():
+    cm = ChatModel('openai', store_history=True)
+    print('message history, string input')
+    print(cm.complete("What is the capital of France?"))
+    print(cm.complete("Repeat the conversation so far"))
+
+def test_complete_with_multiple_messages():
+    print('no message history, system message input')
+    cm = ChatModel('openai', store_history=False)
+    messages = [
+        {"role": "system", "content": 'Turn everyting into baby talk'},
+        {"role": "user", "content": 'What is the capital of France?'}
+    ]
+    print(cm.complete(messages))
+
+def test_complete_with_multiple_messages_and_history():
+    print('message history, system message input')
+    cm = ChatModel('ollama', store_history=True)
+    messages = [
+        {"role": "system", "content": 'Turn everyting into baby talk'},
+        {"role": "user", "content": 'What is the capital of France?'}
+    ]
+    print(cm.complete(messages))
+    print(cm.complete("Can you repeat the conversation so far as a pirate?"))
+        
