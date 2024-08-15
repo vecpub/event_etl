@@ -3,3 +3,6 @@ run_dtl:
 
 run_dbt:
 	cd dbt; dbt run
+
+write_ui_parquet_files:
+	python -c 'import operations; operations.write_ui_parquet_files()'

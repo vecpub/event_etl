@@ -1,1 +1,1 @@
-select * from stg_event
+select * from {{ref('stg_event')}}

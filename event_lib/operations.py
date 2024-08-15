@@ -1,7 +1,7 @@
 import json
 import time
 from tqdm import tqdm
-from eutil import ChatModel, execute_query
+from eutil import config, ChatModel, execute_query, load_duckdb
 
 
 class Slice():
@@ -82,6 +82,14 @@ def summarize_event(event_json_row, chat_model: ChatModel):
     ]
     response = chat_model.complete(messages)
     return response
+
+def write_ui_parquet_files():
+    db = load_duckdb()
+    #db.sql("SELECT * FROM db.public.place").to_parquet('/Users/aplucche/repos/svelte-experiments/static/placetest.parquet')
+    db.sql(f"copy db.public.place to '{config['ui_app_path']}/place.parquet' (FORMAT PARQUET);")
+    db.sql(f"copy db.public.event to '{config['ui_app_path']}/event.parquet' (FORMAT PARQUET);")
+    print('files written')
+    
 
 
 

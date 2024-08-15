@@ -1,6 +1,7 @@
 import os
 import yaml
 import json
+import duckdb
 import psycopg
 import pandas as pd
 from openai import OpenAI
@@ -14,6 +15,7 @@ def load_config(path):
     return config
 
 secrets = load_config('secrets.yaml')
+config = load_config('config.yaml')['dev']
 
 def hello():
     print("Hello")
@@ -91,6 +93,21 @@ class ChatModel():
             return e
 
 
+def load_duckdb():
+    conn = duckdb.connect()
+    creds = secrets['event_db_creds']
+    conn.sql(f"""
+    ATTACH '
+        dbname={creds['database']}  
+        hostaddr=127.0.0.1 
+        user={creds['user']}  
+        password={creds['password']}  
+        port={5432}
+    ' AS db (TYPE postgres, READ_ONLY); 
+             """)
+    return conn
+
+
 #pytest event_lib/eutil.py -rP -k test_complete_with_string_no_history
 def test_complete_with_string_no_history():
     cm = ChatModel('openai', store_history=False)
@@ -121,4 +138,7 @@ def test_complete_with_multiple_messages_and_history():
     ]
     print(cm.complete(messages))
     print(cm.complete("Can you repeat the conversation so far as a pirate?"))
-        
+
+
+def test_config():
+    print(config['ui_app_path'])

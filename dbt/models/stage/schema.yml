@@ -2,15 +2,12 @@
 version: 2
 
 models:
-  - name: stg_ticketmaster
+  - name: stg_event
     description: "Ticketmaster staging transform"
-    columns:
-      - name: batch_id
-        description: "batch where source data was loaded"
-  - name: stg_places
+  - name: stg_place
     description: "Staging table for places"
-  - name: places
+  - name: place
     description: "Normalized deduped places source"
-  - name: events
+  - name: event
     description: "Normalized deduped events source"
   

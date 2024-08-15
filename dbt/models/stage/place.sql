@@ -1,1 +1,1 @@
-select * from stg_place
+select * from {{ref('stg_place')}}
