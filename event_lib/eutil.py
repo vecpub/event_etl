@@ -53,6 +53,7 @@ class ChatModel():
         self.model=model
         self.store_history=store_history
         self.client = self.setup_client()
+        self.system_message = None
         self.message_history = []
 
     def setup_client(self):
@@ -68,6 +69,9 @@ class ChatModel():
             if self.model is None:
                 self.model = 'llama3.1'
             return OpenAI(api_key='unused', base_url='http://localhost:11434/v1')
+    
+    def set_system_message(self, message):
+        self.system_message = {'role': 'system', 'content': message}
 
     def complete(self, messages, tools=None, tool_choice=None):
         if isinstance(messages, str):
@@ -77,15 +81,21 @@ class ChatModel():
             self.message_history = self.message_history + messages 
         else:
             self.message_history = messages
+        
+        if self.system_message:
+            completion_messages = [self.system_message] + self.message_history
+        else:
+            completion_messages = self.message_history
 
         try:
             response = self.client.chat.completions.create(
                 model=self.model,
-                messages=self.message_history,
+                messages=completion_messages,
                 tools=tools,
                 tool_choice=tool_choice,
             )
-            self.message_history.append(response.choices[0].message)
+            resp = response.choices[0].message
+            self.message_history.append({'role': resp.role , 'content': resp.content})
             return response.choices[0].message.content
         except Exception as e:
             print("Unable to generate response")
