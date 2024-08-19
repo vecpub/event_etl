@@ -37,6 +37,26 @@ def execute_query(query, connection_string=None, params=None):
                 conn.commit()
                 return None
 
+
+class ChainableResponse:
+    """Return response but allow for method chaining"""
+    def __init__(self, obj, result):
+        self.obj = obj
+        self.result = result
+
+    def __getattr__(self, name):
+        # If trying to access a method on the wrapped object, return the object itself
+        return getattr(self.obj, name)
+
+    def __str__(self):
+        return str(self.result)
+
+    def __repr__(self):
+        return repr(self.result)
+
+    def __call__(self):
+        return self.result
+
 class ChatModel():
     """ ChatModel class to interact with chat providers
 
@@ -72,6 +92,12 @@ class ChatModel():
     
     def set_system_message(self, message):
         self.system_message = {'role': 'system', 'content': message}
+        return self
+    
+    def apply(self, *funcs):
+        for func in funcs:
+            func(self)
+        return self
 
     def complete(self, messages, tools=None, tool_choice=None):
         if isinstance(messages, str):
@@ -96,7 +122,9 @@ class ChatModel():
             )
             resp = response.choices[0].message
             self.message_history.append({'role': resp.role , 'content': resp.content})
-            return response.choices[0].message.content
+
+            return ChainableResponse(self, response.choices[0].message.content)
+
         except Exception as e:
             print("Unable to generate response")
             print(f'Exception: {e}')
