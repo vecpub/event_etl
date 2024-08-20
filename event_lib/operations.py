@@ -1,33 +1,10 @@
 import json
 import time
 from tqdm import tqdm
-from eutil import config, ChatModel, execute_query, load_duckdb
+from eutil import config, ChatModel, Slice, execute_query, load_duckdb
 
 
-class Slice():
-    """Provides a dataframe based on preset queries or custom query."""
-    def __init__(self, slice_name=None, query=None):
-        self.query=query
-        if slice_name:
-            self.query = self.get_slice_query(slice_name)
-        self.df = execute_query(self.query)
 
-    def get_slice_query(self, slice_name):
-        query_bank = {'place_event':
-        """select
-                event.name as event_name,
-                place.name as location_name,
-                date(min(start_datetime))::varchar as start_date,
-                count(start_datetime) as occurence_count
-            from public.event event 
-            INNER JOIN public.place place on event.place_key = place.key
-            where date(start_datetime) >= current_date
-            GROUP BY 1,2
-            ORDER BY start_date
-            --limit 100 offset 100;"""
-        }
-        selected_query = query_bank[slice_name]
-        return selected_query
 
 '''
 Populate Event Place Description
@@ -80,7 +57,7 @@ def summarize_event(event_json_row, chat_model: ChatModel):
     messages = [
         {"role": "user", "content": json.dumps(event_json_row)} 
     ]
-    response = chat_model.complete(messages)
+    response = str(chat_model.complete(messages))
     return response
 
 def write_ui_parquet_files():
@@ -93,13 +70,3 @@ def write_ui_parquet_files():
 
 
 
-#pytest event_lib/operations.py -rP -k test_summarize_event
-def test_summarize_event():
-    cm = ChatModel('perplexity', store_history=False)
-    test_data = {
-        'event_name': 'BRIC Celebrate Brooklyn! Festival',
-        'location_name': 'Prospect Park Bandshell',
-        'start_date': '2024-08-14', 'occurence_count': 1,
-        'query': 'What event is playing on start_date?',
-        }
-    print(summarize_event(test_data, cm))

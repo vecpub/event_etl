@@ -70,7 +70,7 @@ class ChatModel():
     """
     def __init__(self, provider, model=None, store_history=False):
         self.provider=provider
-        self.model=model
+        self.model=model or self.get_default_model(provider)
         self.store_history=store_history
         self.client = self.setup_client()
         self.system_message = None
@@ -78,26 +78,29 @@ class ChatModel():
 
     def setup_client(self):
         if self.provider == 'openai':
-            if self.model is None:
-                self.model = 'gpt-4o'
             return OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
         if self.provider == 'perplexity':
-            if self.model is None:
-                self.model = 'llama-3.1-sonar-small-128k-online'
             return OpenAI(api_key=os.getenv('PERPLEXITY_KEY'), base_url="https://api.perplexity.ai")
         if self.provider == 'ollama':
-            if self.model is None:
-                self.model = 'llama3.1'
             return OpenAI(api_key='unused', base_url='http://localhost:11434/v1')
+  
+    def get_default_model(self, provider):
+        defaults = {
+            'openai': 'gpt-4o',
+            'perplexity': 'llama-3.1-sonar-small-128k-online',
+            'ollama': 'llama3.1'
+        }
+        return defaults.get(provider)
     
     def set_system_message(self, message):
         self.system_message = {'role': 'system', 'content': message}
         return self
     
     def apply(self, *funcs):
+        result = self
         for func in funcs:
-            func(self)
-        return self
+            result = func(result)
+        return result
 
     def complete(self, messages, tools=None, tool_choice=None):
         if isinstance(messages, str):
@@ -129,6 +132,30 @@ class ChatModel():
             print("Unable to generate response")
             print(f'Exception: {e}')
             return e
+
+
+class Slice():
+    """Provides a dataframe based on preset queries or custom query."""
+    def __init__(self, slice_name=None, query=None):
+        self.query=query or self.get_slice_query(slice_name)
+        self.df = execute_query(self.query)
+
+    def get_slice_query(self, slice_name):
+        query_bank = {'place_event':
+        """select
+                event.name as event_name,
+                place.name as location_name,
+                date(min(start_datetime))::varchar as start_date,
+                count(start_datetime) as occurence_count
+            from public.event event 
+            INNER JOIN public.place place on event.place_key = place.key
+            where date(start_datetime) >= current_date
+            GROUP BY 1,2
+            ORDER BY start_date
+            --limit 100 offset 100;"""
+        }
+        selected_query = query_bank[slice_name]
+        return selected_query
 
 
 def load_duckdb():
