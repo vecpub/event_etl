@@ -2,6 +2,7 @@ import os
 import yaml
 import json
 import duckdb
+import typing
 import psycopg
 import pandas as pd
 from openai import OpenAI
@@ -171,6 +172,63 @@ def load_duckdb():
     ' AS db (TYPE postgres, READ_ONLY); 
              """)
     return conn
+
+def tool_builder(
+        function_name: str,
+        params: dict = None,
+        function_desc: str = None,
+        param_desc: dict = None,
+        parameter_type: str = 'object',
+        required: list[str] = None,
+        strict=True,
+        return_json=True
+    ) -> typing.Union[str, dict]:
+    '''
+    Build an OpenAI tool spec
+
+    Args:
+        params (dict, optional): dict mapping names to types
+            If a list is provided infers type and uses list as enum
+
+    Returns:
+        String or dict based on return_json
+
+    Example:
+    tool_builder('set_king', function_desc='Set the king',
+                   params={'place':str, 'name':str, 'years':[1,1000]},
+                   param_desc={'place':'Where', 'name':'Who','years':'How long'})
+    '''
+    function_obj = {'name': function_name, 'strict': strict}
+    if function_desc:
+        function_obj['desc'] = function_desc
+    if strict:
+        function_obj['strict'] = strict
+
+    if params:
+        param_obj = {'type': parameter_type, 'properties': {}, 'additionalProperties': False}
+        if required:
+            param_obj['required'] = required
+        function_obj['parameters'] = param_obj
+
+        #pytypes to json types
+        type_mapping = {str: 'string',int: 'integer',float: 'number',bool: 'boolean',list: 'array',dict: 'object'}
+        for param, pytype in params.items():
+
+            if isinstance(pytype, list):
+                param_obj['properties'][param] = {
+                    'type': type_mapping.get(type(pytype[0]),'unkown'),
+                    'enum': pytype
+                }
+            else:
+                param_obj['properties'][param] = {'type': type_mapping.get(pytype)}
+
+    if param_desc:
+        for param, desc in param_desc.items():
+            param_obj['properties'][param]['description'] = desc
+
+    tool_spec = {'type': 'function', 'function': function_obj}
+
+    return json.dumps(tool_spec, indent=4) if return_json else tool_spec
 
 
 #pytest event_lib/eutil.py -rP -k test_complete_with_string_no_history
