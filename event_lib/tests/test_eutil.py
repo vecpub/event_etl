@@ -1,5 +1,7 @@
 import json
 import eutil
+import typing
+from dataclasses import dataclass
 
 ## Chat Model Tests
 def test_chat_simple_path():
@@ -43,25 +45,26 @@ def test_get_slice_query():
 ## Tool Builder Tests
 def test_simple_tool_builder():
     """Test basic functionality with minimal inputs."""
-    result = eutil.tool_builder('get_weather', return_json=False)
+    result = eutil.tool_builder('get_weather')
     expected = {
         'type': 'function',
         'function': {
             'name': 'get_weather',
-            'strict': True
+            'strict': True,
+            'parameters': {'type': 'object', 'properties': {}, 'additionalProperties': False}
         }
     }
+    print(expected)
+    print(result)
     assert result == expected
 
 def test_tool_builder_full_specification():
     """Test with all parameters specified"""
     result = eutil.tool_builder(
         'set_king',
-        params={'place': str, 'name': str, 'years': [1, 1000]},
         function_desc='Set the king',
+        params={'name': str, 'place': ['Jungle','Moon'], 'years': int},
         param_desc={'place': 'Where', 'name': 'Who', 'years': 'How long'},
-        required=['place', 'name'],
-        return_json=False
     )
     expected_json = {
         'type': 'function',
@@ -72,13 +75,52 @@ def test_tool_builder_full_specification():
             'parameters': {
                 'type': 'object',
                 'properties': {
-                    'place': {'type': 'string', 'description': 'Where'},
                     'name': {'type': 'string', 'description': 'Who'},
-                    'years': {'type': 'integer', 'enum': [1, 1000], 'description': 'How long'}
+                    'place': {'type': 'string', 'enum': ['Jungle', 'Moon'], 'description': 'Where'},
+                    'years': {'type': 'integer', 'description': 'How long'}
                 },
-                'required': ['place', 'name'],
+                'required': ['name', 'place', 'years'],
                 'additionalProperties': False
             }
         }
     }
     assert result == expected_json
+
+
+
+@dataclass
+class King:
+    name: str = None
+    place: str = None
+    years: str = None
+
+    def set_king(self, name: str, place: str=None, years: int=None):
+        self.name = name
+        self.place = place
+        self.years = years
+        return f'King set to Name: {self.name}, Place: {self.place}, Years: {self.years}'
+
+    def get_king(self):
+        return f'Name: {self.name}, Place: {self.place}, Years: {self.years}'
+
+
+def test_chat_model_and_tool_manager_integration():
+    cm = eutil.ChatModel('ollama',store_history=True)
+    tm = eutil.ToolManager()
+
+    king = King()
+    king.set_king(name='Kong', place='Jungle', years=50)
+
+    tool1 = eutil.tool_builder('set_king', function_desc='Set the king',
+                    params={'place':['Jungle', 'Moon'], 'name':str, 'years':int},
+                    param_desc={'place':'Where', 'name':'Who','years':'How long'},
+                    )
+
+    tool2 = eutil.tool_builder('get_king', function_desc='Get the king')
+
+    tm.add_tool(tool1, king.set_king)
+    tm.add_tool(tool2, king.get_king)
+
+    cm.set_tool_manager(tm)
+    resp = str(cm.complete("Who is the king?"))
+    assert 'Kong' in resp

@@ -5,8 +5,9 @@ import duckdb
 import typing
 import psycopg
 import pandas as pd
-from openai import OpenAI
+from collections import OrderedDict
 
+from openai import OpenAI
 
 def load_config(path):
     script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -76,6 +77,7 @@ class ChatModel():
         self.client = self.setup_client()
         self.system_message = None
         self.message_history = []
+        self.tool_manager = None
 
     def setup_client(self):
         if self.provider == 'openai':
@@ -103,7 +105,11 @@ class ChatModel():
             result = func(result)
         return result
 
-    def complete(self, messages, tools=None, tool_choice=None):
+    def set_tool_manager(self, tool_manager):
+        self.tool_manager = tool_manager
+        return self
+
+    def complete(self, messages, tool_choice=None):
         if isinstance(messages, str):
             messages = [{'role':'user', 'content':messages}]
 
@@ -117,6 +123,8 @@ class ChatModel():
         else:
             completion_messages = self.message_history
 
+        tools = self.tool_manager.get_tools() if self.tool_manager else None
+
         try:
             response = self.client.chat.completions.create(
                 model=self.model,
@@ -125,9 +133,27 @@ class ChatModel():
                 tool_choice=tool_choice,
             )
             resp = response.choices[0].message
+
+            if resp.tool_calls:
+                # Add tool calls message and response to history
+                self.message_history.append({'role':'assistant', 'tool_calls':resp.tool_calls})
+                for tool_call in resp.tool_calls:
+                    function_name = tool_call.function.name
+                    function_args = tool_call.function.arguments
+                    called_tool_response = self.tool_manager.tools[function_name](**json.loads(function_args))
+                    self.message_history.append({
+                        'role': 'tool',
+                        'content': called_tool_response,
+                        'tool_call_id': tool_call.id,
+                        })
+                    tool_response = self.client.chat.completions.create(
+                        model=self.model,
+                        messages=self.message_history)
+                    resp = tool_response.choices[0].message
+
             self.message_history.append({'role': resp.role , 'content': resp.content})
 
-            return ChainableResponse(self, response.choices[0].message.content)
+            return ChainableResponse(self, resp.content)
 
         except Exception as e:
             print("Unable to generate response")
@@ -173,15 +199,28 @@ def load_duckdb():
              """)
     return conn
 
+
+class ToolManager():
+    def __init__(self):
+        self.tools = {}
+        self.tool_definitions = OrderedDict()
+
+    def add_tool(self, tool_definition, func):
+        function_name = tool_definition['function']['name']
+        self.tools[function_name] = func
+        self.tool_definitions[function_name] = tool_definition
+
+    def get_tools(self):
+        return [definition for _, definition in self.tool_definitions.items()]
+
+
 def tool_builder(
         function_name: str,
         params: dict = None,
         function_desc: str = None,
         param_desc: dict = None,
         parameter_type: str = 'object',
-        required: list[str] = None,
         strict=True,
-        return_json=True
     ) -> typing.Union[str, dict]:
     '''
     Build an OpenAI tool spec
@@ -195,8 +234,8 @@ def tool_builder(
 
     Example:
     tool_builder('set_king', function_desc='Set the king',
-                   params={'place':str, 'name':str, 'years':[1,1000]},
-                   param_desc={'place':'Where', 'name':'Who','years':'How long'})
+                 params={'name': str, 'place': ['Jungle','Moon'], 'years': int},
+                 param_desc={'place': 'Where', 'name': 'Who', 'years': 'How long'})
     '''
     function_obj = {'name': function_name, 'strict': strict}
     if function_desc:
@@ -204,12 +243,15 @@ def tool_builder(
     if strict:
         function_obj['strict'] = strict
 
-    if params:
-        param_obj = {'type': parameter_type, 'properties': {}, 'additionalProperties': False}
-        if required:
-            param_obj['required'] = required
-        function_obj['parameters'] = param_obj
+    param_obj = {'type': parameter_type, 'properties': {}, 'additionalProperties': False}
 
+    if params:
+        #required not implemented in OpenAI spec - takes all params
+        param_obj['required'] = [param for param, _ in params.items()]
+    # All functions need 'additionalProperties': False even if no params
+    function_obj['parameters'] = param_obj
+
+    if params:
         #pytypes to json types
         type_mapping = {str: 'string',int: 'integer',float: 'number',bool: 'boolean',list: 'array',dict: 'object'}
         for param, pytype in params.items():
@@ -228,7 +270,7 @@ def tool_builder(
 
     tool_spec = {'type': 'function', 'function': function_obj}
 
-    return json.dumps(tool_spec, indent=4) if return_json else tool_spec
+    return tool_spec
 
 
 #pytest event_lib/eutil.py -rP -k test_complete_with_string_no_history
