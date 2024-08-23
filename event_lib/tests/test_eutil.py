@@ -118,8 +118,8 @@ def test_chat_model_and_tool_manager_integration():
 
     tool2 = eutil.tool_builder('get_king', function_desc='Get the king')
 
-    tm.add_tool(tool1, king.set_king)
-    tm.add_tool(tool2, king.get_king)
+    tm.add_tool(king.set_king, tool1)
+    tm.add_tool(king.get_king, tool2)
 
     cm.set_tool_manager(tm)
     resp = str(cm.complete("Who is the king?"))

@@ -140,16 +140,17 @@ class ChatModel():
                 for tool_call in resp.tool_calls:
                     function_name = tool_call.function.name
                     function_args = tool_call.function.arguments
+                    print(f'Calling tool: {function_name} with args: {function_args}')
                     called_tool_response = self.tool_manager.tools[function_name](**json.loads(function_args))
                     self.message_history.append({
                         'role': 'tool',
                         'content': called_tool_response,
                         'tool_call_id': tool_call.id,
                         })
-                    tool_response = self.client.chat.completions.create(
+                tool_response = self.client.chat.completions.create(
                         model=self.model,
                         messages=self.message_history)
-                    resp = tool_response.choices[0].message
+                resp = tool_response.choices[0].message
 
             self.message_history.append({'role': resp.role , 'content': resp.content})
 
@@ -205,7 +206,7 @@ class ToolManager():
         self.tools = {}
         self.tool_definitions = OrderedDict()
 
-    def add_tool(self, tool_definition, func):
+    def add_tool(self, func, tool_definition):
         function_name = tool_definition['function']['name']
         self.tools[function_name] = func
         self.tool_definitions[function_name] = tool_definition
