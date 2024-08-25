@@ -95,6 +95,13 @@ class King:
     years: str = None
 
     def set_king(self, name: str, place: str=None, years: int=None):
+        """Set the king
+
+        Args:
+            name (str): Who
+            place (str): Where
+            years (int): How long
+        """
         self.name = name
         self.place = place
         self.years = years
@@ -112,8 +119,8 @@ def test_chat_model_and_tool_manager_integration():
     king.set_king(name='Kong', place='Jungle', years=50)
 
     tool1 = eutil.tool_builder('set_king', function_desc='Set the king',
-                    params={'place':['Jungle', 'Moon'], 'name':str, 'years':int},
-                    param_desc={'place':'Where', 'name':'Who','years':'How long'},
+                    params={'name':str, 'place':['Jungle', 'Moon'], 'years':int},
+                    param_desc={'name':'Who', 'place':'Where', 'years':'How long'},
                     )
 
     tool2 = eutil.tool_builder('get_king', function_desc='Get the king')
@@ -124,3 +131,35 @@ def test_chat_model_and_tool_manager_integration():
     cm.set_tool_manager(tm)
     resp = str(cm.complete("Who is the king?"))
     assert 'Kong' in resp
+
+
+def test_docstring_parser():
+    tests = [{
+        'docstring':"function desc\n\n    Args:\n        name (str): name desc\n        var1 (int): var1 desc\n\n    Returns:\n        Something",
+        'expected': ('function desc', {'name': 'name desc', 'var1': 'var1 desc'})
+    },
+    {
+        'docstring':"function desc\n\n    Args:\n        name: name desc\n        var1: var1 desc\n\n    Returns:\n        Something",
+        'expected': ('function desc', {'name': 'name desc', 'var1': 'var1 desc'})
+    },
+        {
+        'docstring':"function desc",
+        'expected': ('function desc', {})
+    },
+    ]
+
+    for test in tests:
+        result = eutil.extract_docstring_info(test['docstring'])
+        assert result == test['expected']
+
+
+
+
+def test_tool_function_parser():
+    king = King()
+    built_tool = eutil.tool_builder('set_king', function_desc='Set the king',
+                params={'name':str, 'place':['Jungle', 'Moon'], 'years':int},
+                param_desc={'name':'Who', 'place':'Where', 'years':'How long'},
+                )
+    inferred_tool = eutil.infer_tool_spec('set_king', king.set_king, enum_override={'place':['Jungle', 'Moon']})
+    assert built_tool == inferred_tool

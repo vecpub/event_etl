@@ -1,8 +1,10 @@
 import os
+import re
 import yaml
 import json
 import duckdb
 import typing
+import inspect
 import psycopg
 import pandas as pd
 from collections import OrderedDict
@@ -272,6 +274,61 @@ def tool_builder(
     tool_spec = {'type': 'function', 'function': function_obj}
 
     return tool_spec
+
+def infer_tool_spec(function_name: str, func: typing.Callable, enum_override: typing.Optional[dict]=None):
+    """Builds a tool spec from a function and docstring formatted in the google style
+
+    Args:
+        function_name (str): Name of the function
+        func (typing.Callable): Function to parse
+        enum_override (dict, optional): Override for enum types, e.g. {'name': ['John', 'Jane']}
+    """
+
+    function_desc, param_desc = extract_docstring_info(func.__doc__)
+
+    params = inspect.getfullargspec(func).annotations
+
+    if enum_override:
+        for key in enum_override:
+            params[key] = enum_override[key]
+
+    tool_spec = tool_builder(function_name, function_desc=function_desc,
+             params=params,
+             param_desc=param_desc)
+
+    return tool_spec
+
+def extract_docstring_info(docstring):
+    """Parses docstrings in the google style
+    Needs double new lines before args
+    Type signatures are optional in args
+
+    Args:
+        docstring (str): Docstring
+    """
+    cleaned_docstring = docstring.strip(' """\n')
+
+    # Split the docstring into segments based on double newlines
+    segments = re.split(r'\n\s*\n', cleaned_docstring)
+
+    # Extract the main function description
+    function_desc = segments[0].strip() if segments else ''
+
+    # Initialize dictionary for parameters
+    param_desc = {}
+
+    # Search for Args section and extract parameter descriptions
+    for segment in segments:
+        if segment.lstrip().startswith('Args:'):
+            param_lines = segment.split('\n')[1:]  # Skip the 'Args:' line
+            for line in param_lines:
+                # Match lines with optional detailed type information
+                match = re.match(r'\s*(\w+)(?:\s+\((.*?)\))?:\s+(.+)', line)
+                if match:
+                    param_name, param_type, description = match.groups()
+                    param_desc[param_name] = f"{description.strip()}"
+
+    return function_desc, param_desc
 
 
 #pytest event_lib/eutil.py -rP -k test_complete_with_string_no_history
