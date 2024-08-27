@@ -4,12 +4,16 @@ import yaml
 import json
 import duckdb
 import typing
+import logging
 import inspect
 import psycopg
 import pandas as pd
 from collections import OrderedDict
 
 from openai import OpenAI
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
 
 def load_config(path):
     script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -21,8 +25,6 @@ def load_config(path):
 secrets = load_config('secrets.yaml')
 config = load_config('config.yaml')['dev']
 
-def hello():
-    print("Hello")
 
 def execute_query(query, connection_string=None, params=None):
     """Returns a df based on a select query or also inserts/updates/deletes. Supports named parameters"""
@@ -41,7 +43,6 @@ def execute_query(query, connection_string=None, params=None):
                 conn.commit()
                 return None
 
-
 class ChainableResponse:
     """Return response but allow for method chaining"""
     def __init__(self, obj, result):
@@ -49,6 +50,7 @@ class ChainableResponse:
         self.result = result
 
     def __getattr__(self, name):
+        logger.debug(f'Returning object')
         # If trying to access a method on the wrapped object, return the object itself
         return getattr(self.obj, name)
 
@@ -65,12 +67,12 @@ class ChatModel():
     """ ChatModel class to interact with chat providers
 
     Args:
-    provider (str): The chat service provider. Options: 'openai', 'perplexity', 'ollama'
-    model (str): The model to use - sane defaults if not provided
-    store_history (bool): Store chat history
+        provider (str): The chat service provider. Options: 'openai', 'perplexity', 'ollama'
+        model (str): The model to use - sane defaults if not provided
+        store_history (bool): Store chat history
 
     Functions:
-    complete(messages, tools=None, tool_choice=None): Generate response from chat provider
+        complete(messages, tools=None, tool_choice=None): Generate response from chat provider
     """
     def __init__(self, provider, model=None, store_history=False):
         self.provider=provider
@@ -80,6 +82,7 @@ class ChatModel():
         self.system_message = None
         self.message_history = []
         self.tool_manager = None
+        self.call_count = 0
 
     def setup_client(self):
         if self.provider == 'openai':
@@ -97,7 +100,7 @@ class ChatModel():
         }
         return defaults.get(provider)
     
-    def set_system_message(self, message):
+    def set_system_prompt(self, message):
         self.system_message = {'role': 'system', 'content': message}
         return self
     
@@ -111,7 +114,10 @@ class ChatModel():
         self.tool_manager = tool_manager
         return self
 
-    def complete(self, messages, tool_choice=None):
+    def get_tool_manager(self):
+        return self.tool_manager
+
+    def complete(self, messages, tool_choice='auto', force_content_response=False):
         if isinstance(messages, str):
             messages = [{'role':'user', 'content':messages}]
 
@@ -127,6 +133,14 @@ class ChatModel():
 
         tools = self.tool_manager.get_tools() if self.tool_manager else None
 
+        logger.debug(f'''
+    Model: {self.model}
+    Call Count: {self.call_count + 1}
+    Tools: {[x['function']['name'] for x in tools or []]} Tool Choice: {tool_choice}
+    Messages:
+    {'\n    '.join(str(x) for x in messages)}
+    ''')
+
         try:
             response = self.client.chat.completions.create(
                 model=self.model,
@@ -134,27 +148,39 @@ class ChatModel():
                 tools=tools,
                 tool_choice=tool_choice,
             )
+
+            self.call_count += 1
             resp = response.choices[0].message
 
             if resp.tool_calls:
                 # Add tool calls message and response to history
-                self.message_history.append({'role':'assistant', 'tool_calls':resp.tool_calls})
+                self.message_history.append({'role':'assistant', 'tool_calls':resp.tool_calls, 'content':resp.content or None})
                 for tool_call in resp.tool_calls:
                     function_name = tool_call.function.name
                     function_args = tool_call.function.arguments
-                    print(f'Calling tool: {function_name} with args: {function_args}')
+                    logger.info(f'Calling tool: {function_name} with args: {function_args} \n')
                     called_tool_response = self.tool_manager.tools[function_name](**json.loads(function_args))
-                    self.message_history.append({
+
+                    function_resolution_message = {
                         'role': 'tool',
                         'content': called_tool_response,
                         'tool_call_id': tool_call.id,
-                        })
-                tool_response = self.client.chat.completions.create(
-                        model=self.model,
-                        messages=self.message_history)
-                resp = tool_response.choices[0].message
+                        }
+                    self.message_history.append(function_resolution_message)
+
+                tool_response = self.complete(
+                    self.message_history,
+                    tool_choice=tool_choice,
+                    force_content_response=True
+                )
+
+                return ChainableResponse(self, tool_response)
 
             self.message_history.append({'role': resp.role , 'content': resp.content})
+
+            # For recursive tool call do not return self
+            if force_content_response:
+                return resp.content
 
             return ChainableResponse(self, resp.content)
 
@@ -329,39 +355,3 @@ def extract_docstring_info(docstring):
                     param_desc[param_name] = f"{description.strip()}"
 
     return function_desc, param_desc
-
-
-#pytest event_lib/eutil.py -rP -k test_complete_with_string_no_history
-def test_complete_with_string_no_history():
-    cm = ChatModel('openai', store_history=False)
-    print('no message history, string input')
-    print(cm.complete("What is the capital of France?"))
-
-def test_complete_with_string_and_history():
-    cm = ChatModel('openai', store_history=True)
-    print('message history, string input')
-    print(cm.complete("What is the capital of France?"))
-    print(cm.complete("Repeat the conversation so far"))
-
-def test_complete_with_multiple_messages():
-    print('no message history, system message input')
-    cm = ChatModel('openai', store_history=False)
-    messages = [
-        {"role": "system", "content": 'Turn everyting into baby talk'},
-        {"role": "user", "content": 'What is the capital of France?'}
-    ]
-    print(cm.complete(messages))
-
-def test_complete_with_multiple_messages_and_history():
-    print('message history, system message input')
-    cm = ChatModel('ollama', store_history=True)
-    messages = [
-        {"role": "system", "content": 'Turn everyting into baby talk'},
-        {"role": "user", "content": 'What is the capital of France?'}
-    ]
-    print(cm.complete(messages))
-    print(cm.complete("Can you repeat the conversation so far as a pirate?"))
-
-
-def test_config():
-    print(config['ui_app_path'])

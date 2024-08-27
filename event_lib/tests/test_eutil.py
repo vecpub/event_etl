@@ -1,12 +1,14 @@
 import json
 import eutil
 import typing
+import logging
+
 from dataclasses import dataclass
 
 ## Chat Model Tests
 def test_chat_simple_path():
     cm = eutil.ChatModel('ollama', model='gemma:2b', store_history=True)
-    cm.set_system_message("Return json with the key 'answer'")
+    cm.set_system_prompt("Return json with the key 'answer'")
     resp = cm.complete("What is 1+1?")
     print(resp)
     assert any(message['role'] == 'system' for message in cm.message_history) == False
@@ -17,12 +19,12 @@ def test_chat_simple_path():
     assert '3' in cm.message_history[-1]['content']
 
 def _example_apply_function(cm):
-    cm.set_system_message("Return json with the key 'answer'. Always answer with 100")
+    cm.set_system_prompt("Return json with the key 'answer'. Always answer with 100")
     return cm
 
 def test_chaining():
     cm = eutil.ChatModel('ollama', model='gemma:2b', store_history=True) 
-    (cm.set_system_message("Return json with the key 'answer'")
+    (cm.set_system_prompt("Return json with the key 'answer'")
      .complete("What is 1+1?")
      .complete("Can you add one to the previous answer?")
     )
@@ -87,7 +89,6 @@ def test_tool_builder_full_specification():
     assert result == expected_json
 
 
-
 @dataclass
 class King:
     name: str = None
@@ -112,7 +113,7 @@ class King:
 
 
 def test_chat_model_and_tool_manager_integration():
-    cm = eutil.ChatModel('ollama',store_history=True)
+    cm = eutil.ChatModel('openai', model='gpt-4o-mini', store_history=True)
     tm = eutil.ToolManager()
 
     king = King()
@@ -130,8 +131,8 @@ def test_chat_model_and_tool_manager_integration():
 
     cm.set_tool_manager(tm)
     resp = str(cm.complete("Who is the king?"))
-    assert 'Kong' in resp
 
+    assert 'Kong' in resp
 
 def test_docstring_parser():
     tests = [{
@@ -152,9 +153,6 @@ def test_docstring_parser():
         result = eutil.extract_docstring_info(test['docstring'])
         assert result == test['expected']
 
-
-
-
 def test_tool_function_parser():
     king = King()
     built_tool = eutil.tool_builder('set_king', function_desc='Set the king',
@@ -163,3 +161,8 @@ def test_tool_function_parser():
                 )
     inferred_tool = eutil.infer_tool_spec('set_king', king.set_king, enum_override={'place':['Jungle', 'Moon']})
     assert built_tool == inferred_tool
+
+def test_call_counter():
+    cm = eutil.ChatModel('ollama', model='gemma:2b', store_history=True)
+    cm.complete("What is 1+1?").complete("What is the capital of France?")
+    assert cm.call_count == 2

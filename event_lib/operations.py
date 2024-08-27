@@ -53,7 +53,7 @@ def summarize_event(event_json_row, chat_model: ChatModel):
     system_message = """You are a research assistant ai who uses search to provide thorough factual answers.
     When given a piece of JSON representing an event you will return additional notable information on the event or notable facts about the specific act.
     Answer in natural text and do not repeat the input JSON."""
-    chat_model.set_system_message(system_message)
+    chat_model.set_system_prompt(system_message)
     messages = [
         {"role": "user", "content": json.dumps(event_json_row)} 
     ]
