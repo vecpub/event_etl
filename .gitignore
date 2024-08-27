@@ -3,7 +3,9 @@
 .venv
 .conda
 .tmp
+
 */secrets.yaml
+event_lib/agents/output/*
 
 __pycache__/
 *.py[cod]
