@@ -117,7 +117,10 @@ class ChatModel():
     def get_tool_manager(self):
         return self.tool_manager
 
-    def complete(self, messages, tool_choice='auto', force_content_response=False):
+    def complete(self, messages, tool_choice=None, force_content_response=False):
+        if self.tool_manager and not tool_choice:
+            tool_choice = 'auto'
+
         if isinstance(messages, str):
             messages = [{'role':'user', 'content':messages}]
 
