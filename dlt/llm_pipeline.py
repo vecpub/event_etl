@@ -8,7 +8,6 @@ from dlt.sources.helpers.rest_client.auth import BearerTokenAuth
 client = RESTClient(
     base_url="https://api.openai.com/v1",
     headers={"Content-Type": "application/json"},
-    #data_selector="choices[0].message.content.domain_names"
 )
 response = client.post("/chat/completions", 
                       auth=BearerTokenAuth(token=dlt.secrets.get("sources.credentials.openai_api_key")),
