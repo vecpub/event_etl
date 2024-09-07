@@ -18,4 +18,4 @@ select distinct
 	event._embedded->'venues'->0->'social'->'twitter'->>'handle' as twitter_handle
 from pipeline_ticketmaster.stg_ticketmaster event order by 1
 )
-select * from tm_source
+select *, md5(tm_source::text)::uuid as row_hash from tm_source

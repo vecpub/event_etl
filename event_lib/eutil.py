@@ -13,7 +13,7 @@ from collections import OrderedDict
 from openai import OpenAI
 
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
+logger.setLevel(logging.INFO)
 
 def load_config(path):
     script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -358,3 +358,16 @@ def extract_docstring_info(docstring):
                     param_desc[param_name] = f"{description.strip()}"
 
     return function_desc, param_desc
+
+
+
+def extract_json_from_response(response_text, as_str=False):
+    try:
+        extract_json_string = re.findall(r'```(.*?)```', str(response_text).replace('```json', '```'), re.DOTALL)[0].strip()
+        if as_str:
+            return extract_json_string
+        else:
+            return json.loads(extract_json_string)
+    except Exception as e:
+        print(e)
+        return None

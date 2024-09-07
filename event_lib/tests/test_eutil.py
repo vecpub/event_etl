@@ -166,3 +166,17 @@ def test_call_counter():
     cm = eutil.ChatModel('ollama', model='gemma:2b', store_history=True)
     cm.complete("What is 1+1?").complete("What is the capital of France?")
     assert cm.call_count == 2
+
+
+
+def test_extract_json_from_response():
+    tests = [
+        {
+            'test_string': 'Example response ```json {"proper":"parsing"}```',
+            'expected_response': "{'proper': 'dict'}"
+        },
+    ]
+    for test in tests:
+        assert type(eutil.extract_json_from_response(test['test_string'])) == dict
+        assert eutil.extract_json_from_response(test['test_string']) == {'proper': 'parsing'}
+        assert eutil.extract_json_from_response(test['test_string'], as_str=True) == '{"proper":"parsing"}'
