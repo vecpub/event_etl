@@ -4,6 +4,7 @@ import time
 import json
 from tqdm import tqdm
 from eutil import config, ChatModel, Slice, execute_query, load_duckdb, extract_json_from_response
+from eutil import secrets
 
 import logging
 
@@ -117,13 +118,24 @@ def summarize_event(event_json_row, chat_model: ChatModel):
     response = str(chat_model.complete(messages))
     return response
 
-def write_ui_parquet_files():
+def write_parquet_files_to_dev():
     db = load_duckdb()
-    #db.sql("SELECT * FROM db.public.place").to_parquet('/Users/aplucche/repos/svelte-experiments/static/placetest.parquet')
     db.sql(f"copy db.public.place to '{config['ui_app_path']}/place.parquet' (FORMAT PARQUET);")
     db.sql(f"copy db.public.event to '{config['ui_app_path']}/event.parquet' (FORMAT PARQUET);")
     print('files written')
-    
 
+def write_parquet_files_to_s3():
+    db = load_duckdb()
+    s3_creds = secrets['s3_creds']
+    db.sql(f"""
+        INSTALL httpfs;
+        LOAD httpfs;
+        SET s3_region='{s3_creds['S3_REGION']}';
+        SET s3_access_key_id='{s3_creds['S3_ACCESS_KEY_ID']}';
+        SET s3_secret_access_key='{s3_creds['S3_SECRET_ACCESS_KEY']}';
+    """)
+    db.sql(f"copy db.public.place to 's3://{s3_creds['S3_BUCKET_NAME']}/place.parquet' (FORMAT PARQUET);")
+    db.sql(f"copy db.public.event to 's3://{s3_creds['S3_BUCKET_NAME']}/event.parquet' (FORMAT PARQUET);")
+    print('files written to s3')
 
 
