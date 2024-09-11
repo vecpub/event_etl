@@ -1,2 +1,3 @@
 dev:
   ui_app_path: ~/repos/event_ui/static
+  nyc_place_parquet_path: /Users/aplucche/ipynb/nyc_area_places.parquet
