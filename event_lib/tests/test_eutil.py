@@ -3,6 +3,7 @@ import eutil
 import typing
 import logging
 
+from datetime import datetime
 from dataclasses import dataclass
 
 ## Chat Model Tests
@@ -180,3 +181,16 @@ def test_extract_json_from_response():
         assert type(eutil.extract_json_from_response(test['test_string'])) == dict
         assert eutil.extract_json_from_response(test['test_string']) == {'proper': 'parsing'}
         assert eutil.extract_json_from_response(test['test_string'], as_str=True) == '{"proper":"parsing"}'
+
+
+def test_parse_messy_start_times():
+    tests = [
+        {'start_date': '2024-09-17', 'start_time': None,
+         'expected_result': datetime(2024,9,17,0,0)},
+        {'start_date': '2024-09-17', 'start_time': '22:00',
+         'expected_result': datetime(2024,9,17,22,0)},
+        {'start_date': '2024-09-17', 'start_time': '6:30pm - 8:30pm',
+         'expected_result': datetime(2024,9,17,18,30)},
+    ]
+    for test in tests:
+        assert eutil.parse_messy_start_times(test['start_date'], test['start_time']) == test['expected_result']

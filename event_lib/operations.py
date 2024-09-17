@@ -122,8 +122,8 @@ def summarize_event(event_json_row, chat_model: ChatModel):
 
 def write_parquet_files_to_dev():
     db = load_duckdb()
-    db.sql(f"copy db.public.place to '{config['ui_app_path']}/place.parquet' (FORMAT PARQUET);")
-    db.sql(f"copy db.public.event to '{config['ui_app_path']}/event.parquet' (FORMAT PARQUET);")
+    db.sql(f"copy db.{config['schema']}.place to '{config['ui_app_path']}/place.parquet' (FORMAT PARQUET);")
+    db.sql(f"copy db.{config['schema']}.event to '{config['ui_app_path']}/event.parquet' (FORMAT PARQUET);")
     print('files written')
 
 def write_parquet_files_to_s3():
@@ -136,8 +136,8 @@ def write_parquet_files_to_s3():
         SET s3_access_key_id='{s3_creds['S3_ACCESS_KEY_ID']}';
         SET s3_secret_access_key='{s3_creds['S3_SECRET_ACCESS_KEY']}';
     """)
-    db.sql(f"copy db.public.place to 's3://{s3_creds['S3_BUCKET_NAME']}/place.parquet' (FORMAT PARQUET);")
-    db.sql(f"copy db.public.event to 's3://{s3_creds['S3_BUCKET_NAME']}/event.parquet' (FORMAT PARQUET);")
+    db.sql(f"copy db.{config['schema']}.place to 's3://{s3_creds['S3_BUCKET_NAME']}/place.parquet' (FORMAT PARQUET);")
+    db.sql(f"copy db.{config['schema']}.event to 's3://{s3_creds['S3_BUCKET_NAME']}/event.parquet' (FORMAT PARQUET);")
     print('files written to s3')
 
 

@@ -8,6 +8,7 @@ import logging
 import inspect
 import psycopg
 import pandas as pd
+from datetime import datetime
 from collections import OrderedDict
 
 from openai import OpenAI
@@ -378,3 +379,24 @@ def midpoint(bbox):
     x = (bbox['xmin'] + bbox['xmax']) / 2
     y = (bbox['ymin'] + bbox['ymax']) / 2
     return (x,y)
+
+
+def parse_messy_start_times(start_date, start_time):
+    """Returns formatted start datetime. Accepts times in formats:
+    22:00, None, 6:30pm - 8:30pm (returns start time only), 7:00pm
+    """
+    parsed_date = datetime.strptime(start_date, '%Y-%m-%d').date()
+
+    if not start_time or pd.isna(start_time):
+        return datetime.combine(parsed_date, datetime.min.time())
+
+    # Remove spaces and split by ' - ' to handle time ranges
+    start_time = start_time.replace(' ', '')
+    time_range = start_time.split('-')
+    start_time_obj = datetime.strptime(
+        time_range[0], '%I:%M%p' if 'am' in time_range[0].lower() or 'pm' in time_range[0].lower() else '%H:%M'
+    ).time()
+
+    start_datetime = datetime.combine(parsed_date, start_time_obj)
+
+    return start_datetime

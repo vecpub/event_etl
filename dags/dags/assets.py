@@ -1,14 +1,17 @@
 from dagster import asset, AssetExecutionContext, op, OpExecutionContext
-from dagster_dbt import DbtCliResource, dbt_assets
+from dagster_dbt import DbtCliResource, dbt_assets, get_asset_key_for_model
 
 from .project import event_etl_project
 
 import json
 import duckdb
 import requests
+import pandas as pd
 from bs4 import BeautifulSoup
 from datetime import datetime
-from eutil import ChatModel, execute_query, extract_json_from_response, config, midpoint
+
+from eutil import ChatModel, execute_query, extract_json_from_response, config, midpoint, parse_messy_start_times
+from operations import write_parquet_files_to_dev, write_parquet_files_to_s3
 
 schema = config['schema']
 
@@ -52,7 +55,7 @@ def ingest_direct_web(context: AssetExecutionContext) -> None:
 def ingest_newsletter() -> None:
     pass
 
-@asset
+@asset(deps=get_asset_key_for_model([event_etl_dbt_assets], "stg_place"))
 def extract_place_alias_from_tm() -> None:
     """Refresh ticketmaster provided aliases"""
     execute_query(f"""with tm_source as (
@@ -71,7 +74,7 @@ def extract_place_alias_from_tm() -> None:
 
 
 @asset(compute_kind="python", deps=[ingest_direct_web, ingest_newsletter])
-def process_places(context: AssetExecutionContext) -> None:
+def place_supplemental(context: AssetExecutionContext) -> None:
     """Match against existing records, lookup in overture data if not available, add all places to places_supplemental
     """
     records = execute_query(f"""
@@ -114,8 +117,8 @@ def process_places(context: AssetExecutionContext) -> None:
     context.add_output_metadata({
         "total_new_places": len(remaining_items),
         "found_in_overture": len(found_places)
-
         })
+
     for place, data in found_places.items():
         key_base = data['name'][0] + '|' + data['region'][0]
         execute_query(f"""
@@ -162,10 +165,88 @@ def process_places(context: AssetExecutionContext) -> None:
             postal_code
         )))
 
-    pass
+
+@asset(compute_kind="python", deps=[place_supplemental])
+def event_supplemental(context: AssetExecutionContext) -> None:
+    """Add new event data. Map to places, deduplicate against existing events
+    """
+    # Pull raw json records
+    records = execute_query(f"""
+    SELECT
+        source_name,
+        json_records->>'event_name' as event_name,
+        json_records->>'venue_name' as venue_name,
+        json_records->>'start_date' as start_date,
+        json_records->>'start_time' as start_time
+    FROM {schema}.json_dump, jsonb_array_elements(json_data) AS json_records
+    WHERE is_processed is null;""")
+
+    context.add_output_metadata({"num_events": len(records)})
+    if len(records) == 0:
+        return
+
+    unique_events = records['event_name'].unique()
+    unique_places = records['venue_name'].unique()
+
+    # Map to existing places - all places should exist due to proccess_places step
+    # !This does not correctly handle places with multiple locations (e.g. Ace Hotel)
+    matched_places = execute_query(f"""
+    SELECT * FROM (
+    SELECT key, name FROM {schema}.place
+    UNION select key, name from {schema}.place_supplemental
+    ) places
+    WHERE name = ANY(%s)
+    """, params=(list(unique_places),))
+
+    mapped_places = pd.merge(records, matched_places, left_on='venue_name', right_on='name', how='inner')
+
+    # Batch match (Exact match against event names)
+    existing_events = execute_query(f"""SELECT * FROM (
+    SELECT name as event_name FROM {schema}.event
+    UNION select name from {schema}.event_supplemental
+    ) events
+    WHERE event_name ilike ANY(%s)
+    """, params=(list(unique_events),))
+
+    context.add_output_metadata({"duplicate_events": len(existing_events)})
+
+    existing_events['already_exists'] = True
+    mapped_events = pd.merge(mapped_places, existing_events, on='event_name', how='left')
+
+    mapped_events['parsed_start_datetime'] = mapped_events.apply(
+        lambda row: parse_messy_start_times(row['start_date'], row['start_time']), axis=1
+    )
+
+    deduped_events = mapped_events.query("already_exists != True")
+
+    # insert rows
+    for _, row in deduped_events.iterrows():
+        execute_query(f"""
+        INSERT INTO {schema}.event_supplemental(
+            name, source, key, start_datetime, place_key)
+            VALUES (%s, %s, md5(concat(%s::text,'|',%s::timestamp))::uuid, %s, %s)
+            ON CONFLICT (key) DO NOTHING
+        """, params=((
+            row['event_name'],
+            row['source_name'],
+            row['event_name'],
+            row['parsed_start_datetime'],
+            row['parsed_start_datetime'],
+            row['key']
+        )))
+
+    # mark as processed
+    execute_query(f"""UPDATE {schema}.json_dump SET is_processed = true
+    WHERE is_processed IS NULL;""")
 
 
+@asset(compute_kind="python", deps=[
+    get_asset_key_for_model([event_etl_dbt_assets], "place"),
+    get_asset_key_for_model([event_etl_dbt_assets], "event")
+    ])
+def dev_parquet_files(context: AssetExecutionContext) -> None:
+    write_parquet_files_to_dev()
 
-@asset(compute_kind="python", deps=[ingest_newsletter, ingest_direct_web])
-def process_events() -> None:
-    pass
+@asset
+def prod_parquet_files(context: AssetExecutionContext) -> None:
+    write_parquet_files_to_s3()

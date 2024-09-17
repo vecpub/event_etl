@@ -1,1 +1,4 @@
-select * from {{ref('stg_event')}}
+SELECT * FROM (
+    SELECT * FROM {{ref('stg_event')}}
+    UNION
+    SELECT * FROM event_supplemental) e
