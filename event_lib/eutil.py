@@ -371,3 +371,10 @@ def extract_json_from_response(response_text, as_str=False):
     except Exception as e:
         print(e)
         return None
+
+
+def midpoint(bbox):
+    """Return midpoint of a bounding box"""
+    x = (bbox['xmin'] + bbox['xmax']) / 2
+    y = (bbox['ymin'] + bbox['ymax']) / 2
+    return (x,y)

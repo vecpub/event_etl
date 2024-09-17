@@ -14,6 +14,8 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+schema = config['schema']
+
 
 '''
 Deduplicate Places
@@ -25,20 +27,21 @@ USAGE: ipython; import operations; operations.run_deduplicate_places()
 '''
 
 def setup_deduplicate_places():
-    execute_query("CREATE TABLE IF NOT EXISTS public.place_is_deleted (row_hash uuid)")
+    execute_query(f"CREATE TABLE IF NOT EXISTS {schema}.place_is_deleted (row_hash uuid)")
 
 def run_deduplicate_places():
     """ Find all records with same place_id and duplicate row data hash"""
-    duplicate_places = execute_query("""
-        select * from stg_place where key in
+    duplicate_places = execute_query(f"""
+        select * from {schema}.stg_place where key in
         (select key from
-        stg_place
-        where row_hash not in (select * from public.place_is_deleted)
+        {schema}.stg_place
+        where row_hash not in (select * from {schema}.place_is_deleted)
         group by 1
         having count(row_hash) > 1)
     """)
     logger.info(f'Running deduplicate_places. Duplicate records found: {len(duplicate_places)}')
     duplicate_places['row_hash'] = duplicate_places['row_hash'].apply(lambda x: str(x))
+    duplicate_places['key'] = duplicate_places['key'].apply(lambda x: str(x))
     for key in duplicate_places['key'].unique():
         dup_df = duplicate_places.query('key == @key').copy()
         dup_json = dup_df.to_json(orient='records')
@@ -48,7 +51,6 @@ def run_deduplicate_places():
 def run_deduplicate_place(dup_json):
     """ """
     cm = ChatModel('perplexity')
-    #system_prompt = "Return json containing only the row_hash of the record that represents the record that is least accurate"
     system_prompt = "Return json containing only the row_hash of the record that represents the record that is least accurate. Use web search to validate lat/lon data if needed"
 
     cm.set_system_prompt(system_prompt)
@@ -58,7 +60,7 @@ def run_deduplicate_place(dup_json):
         provided_result = parsed_json['row_hash']
         print(provided_result)
         logger.info(f'Inserting {provided_result} into place_is_deleted table')
-        execute_query("""INSERT INTO public.place_is_deleted VALUES (%s)""", params=(provided_result,))
+        execute_query(f"""INSERT INTO {schema}.place_is_deleted VALUES (%s)""", params=(provided_result,))
     else:
         print('problems with result format')
 
