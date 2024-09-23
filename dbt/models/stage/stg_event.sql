@@ -15,9 +15,25 @@ select distinct
 	event.classifications->0->'genre'->>'name' as genre,
 	event.classifications->0->'subGenre'->>'name' as sub_genre,
 	event.price_ranges->0->>'min' as price_min,
-	event.price_ranges->0->>'max' as price_max
+	event.price_ranges->0->>'max' as price_max,
+	img.image_url
 from pipeline_ticketmaster.stg_ticketmaster event
-
---order by 1
+left join
+(
+SELECT sub.id, sub.image_url
+FROM (
+    SELECT
+        event_img.id,
+        img->>'url' AS image_url,
+        (img->>'width')::int AS width,
+        ROW_NUMBER() OVER (PARTITION BY event_img.id ORDER BY (img->>'width')::int) AS rn
+    FROM pipeline_ticketmaster.stg_ticketmaster event_img,
+    LATERAL jsonb_array_elements(event_img.images) AS img
+    WHERE (img->>'width')::int > 300
+    order by (img->>'width')::int
+) AS sub
+WHERE sub.rn = 1
+) img
+on img.id = event.id
 )
 select * from tm_source
