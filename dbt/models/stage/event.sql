@@ -1,4 +1,4 @@
 SELECT * FROM (
-    SELECT * FROM {{ref('stg_event')}}
+    SELECT distinct on (key) * FROM {{ref('stg_event')}}
     UNION
     SELECT * FROM event_supplemental) e

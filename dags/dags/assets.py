@@ -11,7 +11,7 @@ from bs4 import BeautifulSoup
 from datetime import datetime
 
 from eutil import ChatModel, execute_query, extract_json_from_response, config, midpoint, parse_messy_start_times
-from operations import write_parquet_files_to_dev, write_parquet_files_to_s3
+from operations import write_parquet_files_to_dev, write_parquet_files_to_s3, run_deduplicate_places
 
 schema = config['schema']
 
@@ -250,3 +250,7 @@ def dev_parquet_files(context: AssetExecutionContext) -> None:
 @asset
 def prod_parquet_files(context: AssetExecutionContext) -> None:
     write_parquet_files_to_s3()
+
+@asset
+def deduplicate_places_operation():
+    run_deduplicate_places()

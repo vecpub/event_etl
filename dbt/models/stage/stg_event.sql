@@ -20,19 +20,15 @@ select distinct
 from pipeline_ticketmaster.stg_ticketmaster event
 left join
 (
-SELECT sub.id, sub.image_url
-FROM (
-    SELECT
-        event_img.id,
-        img->>'url' AS image_url,
-        (img->>'width')::int AS width,
-        ROW_NUMBER() OVER (PARTITION BY event_img.id ORDER BY (img->>'width')::int) AS rn
-    FROM pipeline_ticketmaster.stg_ticketmaster event_img,
-    LATERAL jsonb_array_elements(event_img.images) AS img
-    WHERE (img->>'width')::int > 300
-    order by (img->>'width')::int
-) AS sub
-WHERE sub.rn = 1
+-- return smallest image per id > 300px
+SELECT DISTINCT ON (event_img.id)
+    event_img.id,
+    img->>'url' AS image_url,
+    (img->>'width')::int AS width
+FROM pipeline_ticketmaster.stg_ticketmaster event_img,
+LATERAL jsonb_array_elements(event_img.images) AS img
+WHERE (img->>'width')::int > 300
+ORDER BY event_img.id, (img->>'width')::int
 ) img
 on img.id = event.id
 )
