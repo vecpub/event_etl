@@ -400,3 +400,17 @@ def parse_messy_start_times(start_date, start_time):
     start_datetime = datetime.combine(parsed_date, start_time_obj)
 
     return start_datetime
+
+
+
+class EmbedManager():
+    """
+    Manages both local and api embedding models
+    """
+    def __init__(self, corpus=None):
+        self.corpus = corpus
+
+    def query(self):
+        pass
+
+    

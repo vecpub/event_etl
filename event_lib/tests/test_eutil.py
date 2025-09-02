@@ -194,3 +194,11 @@ def test_parse_messy_start_times():
     ]
     for test in tests:
         assert eutil.parse_messy_start_times(test['start_date'], test['start_time']) == test['expected_result']
+
+
+
+#pytest event_lib/test_eutil.py -rP -k test_embedmanager
+
+def test_embedmanager():
+    em = eutil.EmbedManager()
+    assert em.query() == None

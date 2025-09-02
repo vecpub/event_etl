@@ -6,6 +6,7 @@
 
 */secrets.yaml
 event_lib/agents/output/*
+dags/tmp*
 
 __pycache__/
 *.py[cod]

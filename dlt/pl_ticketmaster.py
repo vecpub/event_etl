@@ -60,8 +60,9 @@ def test_events_all():
         params={
             "dmaId": 345,
             "size": 200,
-            #"localStartDateTime": '*,2024-08-21T00:00:00',
-            "localStartDateTime": '2024-08-28T00:00:00,2024-09-05T00:00:00',
+            #"localStartDateTime": '*,2024-08-28T00:00:00',
+            #"localStartDateTime": '2025-08-21T00:00:00,2025-09-05T00:00:00',
+            "localStartDateTime": '2025-08-06T00:00:00,2025-09-21T00:00:00',
         },
     ):
         time.sleep(1)
